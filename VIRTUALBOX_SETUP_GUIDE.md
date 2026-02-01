@@ -328,7 +328,21 @@ curl http://10.109.0.150:5001/health
 # }
 ```
 
-### Test 2: Check Health of Service B
+### Test 2: Get Service A Information
+```bash
+curl http://10.109.0.150:5001/info
+
+# Expected response:
+# {
+#   "service_name": "Service-A-VCC-1",
+#   "service_port": 5001,
+#   "hostname": "vcc-1",
+#   "local_ip": "10.109.0.150",
+#   "message": "This is Service A running on VCC-1"
+# }
+```
+
+### Test 3: Check Health of Service B
 ```bash
 curl http://10.109.0.151:5002/health
 
@@ -340,7 +354,36 @@ curl http://10.109.0.151:5002/health
 # }
 ```
 
-### Test 3: Service A Calling Service B
+### Test 4: Get Service B Information
+```bash
+curl http://10.109.0.151:5002/info
+
+# Expected response:
+# {
+#   "service_name": "Service-B-VCC-2",
+#   "service_port": 5002,
+#   "hostname": "vcc-2",
+#   "local_ip": "10.109.0.151",
+#   "message": "This is Service B running on VCC-2"
+# }
+```
+
+### Test 5: Service B Direct Response Endpoint
+```bash
+curl http://10.109.0.151:5002/response
+
+# Expected response:
+# {
+#   "service_name": "Service-B-VCC-2",
+#   "port": 5002,
+#   "message": "This is a response from VCC-2 Micro Service",
+#   "data": {
+#     "purpose": "This demonstration is for Educational Purpose only"
+#   }
+# }
+```
+
+### Test 6: Service A Calling Service B (Service A calls /response on Service B)
 ```bash
 curl http://10.109.0.150:5001/call-service-b
 
@@ -349,11 +392,18 @@ curl http://10.109.0.150:5001/call-service-b
 #   "caller": "Service-A-VCC-1",
 #   "caller_port": 5001,
 #   "message": "Successfully called Service B",
-#   "service_b_response": { ... }
+#   "service_b_response": {
+#     "service_name": "Service-B-VCC-2",
+#     "port": 5002,
+#     "message": "This is a response from VCC-2 Micro Service",
+#     "data": {
+#       "purpose": "This demonstration is for Educational Purpose only"
+#     }
+#   }
 # }
 ```
 
-### Test 4: Service B Calling Service A (Bidirectional Communication)
+### Test 7: Service B Calling Service A (Bidirectional Communication - Service B calls /info on Service A)
 ```bash
 curl http://10.109.0.151:5002/call-service-a
 
@@ -362,7 +412,13 @@ curl http://10.109.0.151:5002/call-service-a
 #   "caller": "Service-B-VCC-2",
 #   "caller_port": 5002,
 #   "message": "Successfully called Service A",
-#   "service_a_response": { ... }
+#   "service_a_response": {
+#     "service_name": "Service-A-VCC-1",
+#     "service_port": 5001,
+#     "hostname": "vcc-1",
+#     "local_ip": "10.109.0.150",
+#     "message": "This is Service A running on VCC-1"
+#   }
 # }
 ```
 

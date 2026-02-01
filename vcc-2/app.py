@@ -52,8 +52,7 @@ def response():
         "service_name": SERVICE_B_NAME,
         "port": SERVICE_B_PORT,
         "message": "This is a response from VCC-2 Micro Service",
-        "data": { "This demonstration is for Educational Purpose only"
-        }
+        "data": {"purpose": "This demonstration is for Educational Purpose only"}
     }), 200
 
 
