@@ -11,7 +11,7 @@ import socket
 app = Flask(__name__)
 
 # Hardcoded IP address and port of Service B (vcc-2)
-SERVICE_B_IP = "192.168.1.11"
+SERVICE_B_IP = "10.109.0.151"
 SERVICE_B_PORT = 5002
 SERVICE_B_URL = f"http://{SERVICE_B_IP}:{SERVICE_B_PORT}"
 

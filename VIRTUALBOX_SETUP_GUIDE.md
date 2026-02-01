@@ -25,22 +25,26 @@ This guide provides comprehensive instructions for setting up a multi-VM microse
 
 The system consists of:
 - **VM 1 (vcc-1):** Hosts Service A - Communicates with Service B
-  - IP Address: `192.168.1.10`
+  - IP Address: `10.109.0.150`
   - Port: `5001`
   
-- **VM 2 (vcc-2):** Hosts Service B - Responds to Service A
-  - IP Address: `192.168.1.11`
+- **VM 2 (vcc-2):** Hosts Service B - Responds to Service A and calls back to Service A
+  - IP Address: `10.109.0.151`
   - Port: `5002`
 
 Communication flow:
 ```
-Service A (192.168.1.10:5001) 
+Service A (10.109.0.150:5001) 
     ↓
 Makes HTTP Request to Service B
     ↓
-Service B (192.168.1.11:5002) 
+Service B (10.109.0.151:5002) 
     ↓
-Returns Hardcoded Response
+Returns Response
+    ↓
+Service B also calls back to Service A (bidirectional)
+    ↓
+Service A (10.109.0.150:5001)
 ```
 
 ---
@@ -99,7 +103,7 @@ virtualbox --version
    - **Machine Folder:** Default or custom location
    - **Type:** Linux or appropriate OS
    - **Version:** Ubuntu 22.04 LTS (recommended)
-   - **Memory:** 2048 MB minimum (4096 MB recommended)
+   - **Memory:** 2048 MhB minimum (4096 MB recommended)
    - **Storage:** 20GB dynamic allocation
 
 #### Step 2: Install Operating System
@@ -176,12 +180,15 @@ Add the following configuration:
 ```yaml
 network:
   version: 2
+  renderer: networkd
   ethernets:
-    eth0:
+    enp0s8:
       dhcp4: no
       addresses:
-        - 192.168.1.10/24
-      gateway4: 192.168.1.1
+        - 10.109.0.150/23
+      routes:
+        - to: default
+          via: 10.109.0.1
       nameservers:
         addresses: [8.8.8.8, 8.8.4.4]
 ```
@@ -204,12 +211,15 @@ Repeat the same process with IP address `192.168.1.11`
 ```yaml
 network:
   version: 2
+  renderer: networkd
   ethernets:
-    eth0:
+    enp0s8:
       dhcp4: no
       addresses:
-        - 192.168.1.11/24
-      gateway4: 192.168.1.1
+        - 10.109.0.151/23
+      routes:
+        - to: default
+          via: 10.109.0.1
       nameservers:
         addresses: [8.8.8.8, 8.8.4.4]
 ```
@@ -258,7 +268,7 @@ pip install -r requirements.txt
 
 #### Step 4: Verify Configuration
 Edit `app.py` and confirm:
-- `SERVICE_B_IP = "192.168.1.11"`
+- `SERVICE_B_IP = "10.109.0.151"`
 - `SERVICE_B_PORT = 5002`
 
 #### Step 5: Run Service A
@@ -308,7 +318,7 @@ python app.py
 ### Test 1: Check Health of Service A
 From any machine on the network:
 ```bash
-curl http://192.168.1.10:5001/health
+curl http://10.109.0.150:5001/health
 
 # Expected response:
 # {
@@ -320,7 +330,7 @@ curl http://192.168.1.10:5001/health
 
 ### Test 2: Check Health of Service B
 ```bash
-curl http://192.168.1.11:5002/health
+curl http://10.109.0.151:5002/health
 
 # Expected response:
 # {
@@ -332,33 +342,28 @@ curl http://192.168.1.11:5002/health
 
 ### Test 3: Service A Calling Service B
 ```bash
-curl http://192.168.1.10:5001/call-service-b
+curl http://10.109.0.150:5001/call-service-b
 
 # Expected response:
 # {
 #   "caller": "Service-A-VCC-1",
 #   "caller_port": 5001,
 #   "message": "Successfully called Service B",
-#   "service_b_response": {
-#     "service_name": "Service-B-VCC-2",
-#     "port": 5002,
-#     "message": "This is a hardcoded response from Service B",
-#     "data": {
-#       "status": "success",
-#       "timestamp": "2026-02-01",
-#       "purpose": "Educational - Inter-service communication demonstration"
-#     }
-#   }
+#   "service_b_response": { ... }
 # }
 ```
 
-### Test 4: Service Information
+### Test 4: Service B Calling Service A (Bidirectional Communication)
 ```bash
-# Get Service A info
-curl http://192.168.1.10:5001/info
+curl http://10.109.0.151:5002/call-service-a
 
-# Get Service B info
-curl http://192.168.1.11:5002/info
+# Expected response:
+# {
+#   "caller": "Service-B-VCC-2",
+#   "caller_port": 5002,
+#   "message": "Successfully called Service A",
+#   "service_a_response": { ... }
+# }
 ```
 
 ---
