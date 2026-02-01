@@ -23,10 +23,12 @@ This project demonstrates a practical implementation of microservices architectu
 
 ### 1. **Source Code Repository**
 This repository contains:
-- ✅ `vcc-1/app.py` - Service A microservice code
-- ✅ `vcc-1/requirements.txt` - Dependencies for Service A
-- ✅ `vcc-2/app.py` - Service B microservice code
-- ✅ `vcc-2/requirements.txt` - Dependencies for Service B
+- ✅ `vcc-1/app.py` - Orchestrator microservice code
+- ✅ `vcc-1/requirements.txt` - Dependencies for Orchestrator
+- ✅ `vcc-2/app.py` - Availability microservice code
+- ✅ `vcc-2/requirements.txt` - Dependencies for Availability
+- ✅ `vcc-3/app.py` - Payment microservice code
+- ✅ `vcc-3/requirements.txt` - Dependencies for Payment
 - ✅ `VIRTUALBOX_SETUP_GUIDE.md` - Complete VirtualBox setup instructions
 - ✅ `ARCHITECTURE_DESIGN.md` - Architecture diagrams and design documentation
 - ✅ `DEPLOYMENT_INSTRUCTIONS.md` - Step-by-step deployment guide
@@ -63,45 +65,58 @@ See `DEPLOYMENT_INSTRUCTIONS.md` for:
 ### High-Level Overview
 
 ```
-VirtualBox Host-only Network (vboxnet0: 192.168.1.0/24)
+VirtualBox Host-only Network (10.109.0.0/23)
     │
-    ├─► VM 1 (vcc-1): 192.168.1.10
-    │   └─► Service A (Flask) - Port 5001
-    │       • Initiates communication with Service B
-    │       • Calls /response endpoint on Service B
-    │       • Returns hardcoded responses
+    ├─► VM 1 (vcc-1): 10.109.0.150
+    │   └─► Orchestrator Service (Flask) - Port 5001
+    │       • Accepts POST /book-hotel requests (no body required)
+    │       • Coordinates with Availability and Payment services
+    │       • Returns consolidated booking confirmations
     │
-    └─► VM 2 (vcc-2): 192.168.1.11
-        └─► Service B (Flask) - Port 5002
-            • Listens for requests from Service A
-            • Responds with hardcoded data
-            • Health check available
+    ├─► VM 2 (vcc-2): 10.109.0.151
+    │   └─► Availability Service (Flask) - Port 5002
+    │       • Checks room availability and pricing
+    │       • Maintains mock hotel database
+    │       • Returns availability details
+    │
+    └─► VM 3 (vcc-3): 10.109.0.152
+        └─► Payment Service (Flask) - Port 5003
+            • Processes payment transactions
+            • Validates payment methods
+            • Returns payment confirmations
 ```
 
 ### Service Communication Flow
 
 ```
-Client (HTTP Request)
+Client (HTTP POST /book-hotel)
     ↓
-Service A (192.168.1.10:5001)
+Orchestrator Service (10.109.0.150:5001)
+    ├─ No request body required (hardcoded booking: Lakshya Vashisth at Grand Plaza, Suite)
+    ├─ POST /book-hotel (Main orchestration endpoint)
+    └─ Calls Availability Service
+        ↓
+        HTTP POST to Availability at 10.109.0.151:5002
+        ↓
+Availability Service (10.109.0.151:5002)
     ├─ GET / (Welcome)
-    ├─ GET /health (Health check)
-    ├─ GET /info (Service information)
-    └─ GET /call-service-b (Calls Service B at 192.168.1.11:5002)
+    ├─ POST /check-availability (Check room availability)
+    └─ GET /hotels (List available hotels)
         ↓
-        HTTP Request to Service B
+        HTTP Response with room details
         ↓
-Service B (192.168.1.11:5002)
-    ├─ GET / (Welcome)
-    ├─ GET /health (Health check)
-    ├─ GET /info (Service information)
-    └─ GET /response (Returns hardcoded response)
-        ↓
-        HTTP Response
-        ↓
-Service A wraps response
+Orchestrator then calls Payment Service (if available)
     ↓
-Returns to Client
+    HTTP POST to Payment at 10.109.0.152:5003
+    ↓
+Payment Service (10.109.0.152:5003)
+    ├─ GET / (Welcome)
+    ├─ POST /process-payment (Process payment)
+    └─ GET /payment-status/<txn_id> (Check payment status)
+        ↓
+        HTTP Response with payment confirmation
+        ↓
+Returns consolidated booking confirmation to Client
 ```
 
 ---
@@ -120,13 +135,13 @@ Returns to Client
 #### 1. **Create and Configure VMs**
 
 Follow the detailed instructions in [VIRTUALBOX_SETUP_GUIDE.md](VIRTUALBOX_SETUP_GUIDE.md):
-- Create two Ubuntu 22.04 LTS VMs
+- Create three Ubuntu 22.04 LTS VMs
 - Configure host-only network
-- Assign static IPs (192.168.1.10 and 192.168.1.11)
+- Assign static IPs (10.109.0.150, 10.109.0.151, 10.109.0.152)
 
 #### 2. **Deploy Services**
 
-On VM 1 (vcc-1):
+On VM 1 (vcc-1) - Orchestrator:
 ```bash
 cd ~/microservices/vcc-1
 python3 -m venv venv
@@ -135,9 +150,18 @@ pip install -r requirements.txt
 python app.py
 ```
 
-On VM 2 (vcc-2):
+On VM 2 (vcc-2) - Availability:
 ```bash
 cd ~/microservices/vcc-2
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+On VM 3 (vcc-3) - Payment:
+```bash
+cd ~/microservices/vcc-3
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -147,14 +171,17 @@ python app.py
 #### 3. **Test Communication**
 
 ```bash
-# Test Service A
-curl http://192.168.1.10:5001/health
+# Test Orchestrator
+curl http://10.109.0.150:5001/
 
-# Test Service B
-curl http://192.168.1.11:5002/health
+# Test Availability
+curl http://10.109.0.151:5002/
 
-# Test inter-service communication
-curl http://192.168.1.10:5001/call-service-b
+# Test Payment
+curl http://10.109.0.152:5003/
+
+# Test complete booking flow (no body required)
+curl -X POST http://10.109.0.150:5001/book-hotel
 ```
 
 ---
@@ -174,12 +201,17 @@ curl http://192.168.1.10:5001/call-service-b
 
 ```
 vcc-1/
-├── app.py                    # Service A microservice
+├── app.py                    # Orchestrator microservice
 ├── requirements.txt          # Python dependencies
 └── venv/                     # Virtual environment (created during setup)
 
 vcc-2/
-├── app.py                    # Service B microservice
+├── app.py                    # Availability microservice
+├── requirements.txt          # Python dependencies
+└── venv/                     # Virtual environment (created during setup)
+
+vcc-3/
+├── app.py                    # Payment microservice
 ├── requirements.txt          # Python dependencies
 └── venv/                     # Virtual environment (created during setup)
 
@@ -215,23 +247,36 @@ README.md                     # This file
 
 ## 🔌 API Endpoints
 
-### Service A (192.168.1.10:5001)
+### Orchestrator Service (10.109.0.150:5001)
 
-| Endpoint | Method | Purpose | Response |
-|----------|--------|---------|----------|
-| `/` | GET | Welcome message | Service info and endpoint list |
-| `/health` | GET | Health check | Status: healthy |
-| `/info` | GET | Service information | Service name, port, hostname, IP |
-| `/call-service-b` | GET | Call Service B | Response from Service B wrapped in Service A response |
+| Endpoint | Method | Purpose | Request Body | Response |
+|----------|--------|---------|--------------|----------|
+| `/` | GET | Welcome message | None | Service info and endpoint list |
+| `/book-hotel` | POST | Book a hotel (hardcoded) | None (empty/ignored) | Booking confirmation with transaction ID |
 
-### Service B (192.168.1.11:5002)
+**Hardcoded Booking Details:**
+- Guest: Lakshya Vashisth
+- Hotel: Grand Plaza
+- Room: Suite
+- Check-in: 2026-02-15
+- Check-out: 2026-02-18
+- Payment Method: Credit Card
 
-| Endpoint | Method | Purpose | Response |
-|----------|--------|---------|----------|
-| `/` | GET | Welcome message | Service info and endpoint list |
-| `/health` | GET | Health check | Status: healthy |
-| `/info` | GET | Service information | Service name, port, hostname, IP |
-| `/response` | GET | Hardcoded response | Hardcoded JSON data from Service B |
+### Availability Service (10.109.0.151:5002)
+
+| Endpoint | Method | Purpose | Request Body | Response |
+|----------|--------|---------|--------------|----------|
+| `/` | GET | Welcome message | None | Service info and endpoint list |
+| `/hotels` | GET | List available hotels | None | List of hotels with room types |
+| `/check-availability` | POST | Check room availability | Hotel, dates, room type | Room availability and pricing |
+
+### Payment Service (10.109.0.152:5003)
+
+| Endpoint | Method | Purpose | Request Body | Response |
+|----------|--------|---------|--------------|----------|
+| `/` | GET | Welcome message | None | Service info and endpoint list |
+| `/process-payment` | POST | Process payment | Booking and payment details | Payment confirmation |
+| `/payment-status/<txn_id>` | GET | Check payment status | None (in URL) | Payment transaction details |
 
 ---
 
@@ -239,14 +284,17 @@ README.md                     # This file
 
 - [ ] VMs created and running
 - [ ] Network connectivity verified (`ping` tests)
-- [ ] Static IPs assigned correctly
-- [ ] Service A running on port 5001
-- [ ] Service B running on port 5002
-- [ ] Service A `/health` endpoint responds
-- [ ] Service B `/health` endpoint responds
-- [ ] Service A can call Service B via `/call-service-b`
-- [ ] Service B returns hardcoded response
-- [ ] Complete round-trip communication working
+- [ ] Static IPs assigned correctly (10.109.0.150, 10.109.0.151, 10.109.0.152)
+- [ ] Orchestrator running on port 5001
+- [ ] Availability running on port 5002
+- [ ] Payment running on port 5003
+- [ ] Orchestrator `/` endpoint responds
+- [ ] Availability `/hotels` endpoint responds
+- [ ] Payment `/` endpoint responds
+- [ ] POST to Orchestrator `/book-hotel` (no body) returns booking confirmation
+- [ ] Transaction ID included in booking response
+- [ ] Complete end-to-end booking workflow working
+- [ ] Service names properly reflected in output (Orchestrator, Availability, Payment)
 
 ---
 
@@ -281,14 +329,23 @@ For detailed troubleshooting, see [DEPLOYMENT_INSTRUCTIONS.md](DEPLOYMENT_INSTRU
 ### Hardcoded IP Addresses
 
 The microservices use hardcoded IP addresses for educational purposes:
-- Service A: `SERVICE_B_IP = "192.168.1.11"`
-- Service B: Listens on all interfaces (`0.0.0.0`)
+- Orchestrator: 10.109.0.150
+- Availability: 10.109.0.151
+- Payment: 10.109.0.152
 
 **For production environments:**
 - Use environment variables or configuration files
 - Implement service discovery (Consul, Eureka)
 - Use container orchestration (Kubernetes)
 - Implement proper configuration management
+
+### Service Responses
+
+All service responses are cleaned and role-focused:
+- No service identifier fields in responses
+- Responses contain only business-relevant data
+- Error messages remain descriptive
+- Timestamp information included where appropriate
 
 ### Debug Mode
 
@@ -320,14 +377,15 @@ For issues or questions:
 
 | Aspect | Specification |
 |--------|---------------|
-| **VM Count** | 2 VMs |
+| **VM Count** | 3 VMs |
 | **Hypervisor** | VirtualBox |
 | **Network Type** | Host-only (internal) |
 | **Service Type** | Flask microservices |
 | **Communication** | HTTP REST API |
-| **IP Range** | 192.168.1.0/24 |
-| **Service A Port** | 5001 |
-| **Service B Port** | 5002 |
+| **IP Range** | 10.109.0.0/23 |
+| **Orchestrator Port** | 5001 |
+| **Availability Port** | 5002 |
+| **Payment Port** | 5003 |
 | **Python Version** | 3.9+ |
 | **Framework Version** | Flask 3.1.2 |
 
@@ -350,10 +408,12 @@ This project is created for educational purposes. Use, modify, and distribute fr
 ## ✨ Summary
 
 This project successfully demonstrates:
-- ✅ Multi-VM environment setup using VirtualBox
+- ✅ Multi-VM environment setup using VirtualBox (3 VMs)
 - ✅ Network configuration and static IP assignment
-- ✅ Flask microservices deployment
-- ✅ Inter-service communication with hardcoded IPs
+- ✅ Flask microservices deployment with role-based naming
+- ✅ Service orchestration with hardcoded values
+- ✅ Inter-service communication with simplified responses
+- ✅ Hotel booking workflow end-to-end
 - ✅ Comprehensive documentation
 - ✅ Complete API testing procedures
 
