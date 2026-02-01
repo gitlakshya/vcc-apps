@@ -167,17 +167,20 @@ Repeat the same steps with:
 
 ### Step 2: Configure Static IPs on VMs
 
-#### VM 1 (vcc-1) - IP: 192.168.1.10
+#### VM 1 (vcc-1) - IP: 10.109.0.150
 
-SSH into VM and edit network configuration:
+SSH into VM 1 and configure static IP using the existing netplan file:
 
 ```bash
-# For Ubuntu 22.04 (Netplan)
-sudo nano /etc/netplan/01-netcfg.yaml
-```
+# Step 1: Check existing netplan files
+ls /etc/netplan/
+# Should show: 50-cloud-init.yaml (or similar)
 
-Add the following configuration:
-```yaml
+# Step 2: Backup the existing file
+sudo cp /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak
+
+# Step 3: Create new netplan configuration using heredoc (copy-paste friendly)
+sudo bash -c 'cat > /etc/netplan/50-cloud-init.yaml << EOF
 network:
   version: 2
   renderer: networkd
@@ -191,24 +194,32 @@ network:
           via: 10.109.0.1
       nameservers:
         addresses: [8.8.8.8, 8.8.4.4]
-```
+EOF'
 
-Apply the configuration:
-```bash
+# Step 4: Apply the configuration
 sudo netplan apply
+
+# Step 5: Verify the configuration
+ip addr show enp0s8
+# Should show: inet 10.109.0.150/23
+
+ip route show
+# Should show default route via 10.109.0.1
 ```
 
-Verify:
+#### VM 2 (vcc-2) - IP: 10.109.0.151
+
+Repeat the same process on VM 2 with IP address `10.109.0.151`:
+
 ```bash
-ip addr show
-# Should show 192.168.1.10
-```
+# Step 1: Check existing netplan files
+ls /etc/netplan/
 
-#### VM 2 (vcc-2) - IP: 192.168.1.11
+# Step 2: Backup the existing file
+sudo cp /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak
 
-Repeat the same process with IP address `192.168.1.11`
-
-```yaml
+# Step 3: Create new netplan configuration
+sudo bash -c 'cat > /etc/netplan/50-cloud-init.yaml << EOF
 network:
   version: 2
   renderer: networkd
@@ -222,6 +233,17 @@ network:
           via: 10.109.0.1
       nameservers:
         addresses: [8.8.8.8, 8.8.4.4]
+EOF'
+
+# Step 4: Apply the configuration
+sudo netplan apply
+
+# Step 5: Verify the configuration
+ip addr show enp0s8
+# Should show: inet 10.109.0.151/23
+
+ip route show
+# Should show default route via 10.109.0.1
 ```
 
 ### Step 3: Test Network Connectivity
@@ -328,21 +350,7 @@ curl http://10.109.0.150:5001/health
 # }
 ```
 
-### Test 2: Get Service A Information
-```bash
-curl http://10.109.0.150:5001/info
-
-# Expected response:
-# {
-#   "service_name": "Service-A-VCC-1",
-#   "service_port": 5001,
-#   "hostname": "vcc-1",
-#   "local_ip": "10.109.0.150",
-#   "message": "This is Service A running on VCC-1"
-# }
-```
-
-### Test 3: Check Health of Service B
+### Test 2: Check Health of Service B
 ```bash
 curl http://10.109.0.151:5002/health
 
@@ -354,36 +362,7 @@ curl http://10.109.0.151:5002/health
 # }
 ```
 
-### Test 4: Get Service B Information
-```bash
-curl http://10.109.0.151:5002/info
-
-# Expected response:
-# {
-#   "service_name": "Service-B-VCC-2",
-#   "service_port": 5002,
-#   "hostname": "vcc-2",
-#   "local_ip": "10.109.0.151",
-#   "message": "This is Service B running on VCC-2"
-# }
-```
-
-### Test 5: Service B Direct Response Endpoint
-```bash
-curl http://10.109.0.151:5002/response
-
-# Expected response:
-# {
-#   "service_name": "Service-B-VCC-2",
-#   "port": 5002,
-#   "message": "This is a response from VCC-2 Micro Service",
-#   "data": {
-#     "purpose": "This demonstration is for Educational Purpose only"
-#   }
-# }
-```
-
-### Test 6: Service A Calling Service B (Service A calls /response on Service B)
+### Test 3: Service A Calling Service B
 ```bash
 curl http://10.109.0.150:5001/call-service-b
 
@@ -392,18 +371,11 @@ curl http://10.109.0.150:5001/call-service-b
 #   "caller": "Service-A-VCC-1",
 #   "caller_port": 5001,
 #   "message": "Successfully called Service B",
-#   "service_b_response": {
-#     "service_name": "Service-B-VCC-2",
-#     "port": 5002,
-#     "message": "This is a response from VCC-2 Micro Service",
-#     "data": {
-#       "purpose": "This demonstration is for Educational Purpose only"
-#     }
-#   }
+#   "service_b_response": { ... }
 # }
 ```
 
-### Test 7: Service B Calling Service A (Bidirectional Communication - Service B calls /info on Service A)
+### Test 4: Service B Calling Service A (Bidirectional Communication)
 ```bash
 curl http://10.109.0.151:5002/call-service-a
 
@@ -412,13 +384,7 @@ curl http://10.109.0.151:5002/call-service-a
 #   "caller": "Service-B-VCC-2",
 #   "caller_port": 5002,
 #   "message": "Successfully called Service A",
-#   "service_a_response": {
-#     "service_name": "Service-A-VCC-1",
-#     "service_port": 5001,
-#     "hostname": "vcc-1",
-#     "local_ip": "10.109.0.150",
-#     "message": "This is Service A running on VCC-1"
-#   }
+#   "service_a_response": { ... }
 # }
 ```
 
@@ -490,14 +456,76 @@ kill -9 <PID>
 ### Issue: Python Package Installation Fails
 
 ```bash
-# Upgrade pip
-python3 -m pip install --upgrade pip
+# Ensure you're in the virtual environment
+source venv/bin/activate
 
-# Install with specific version constraints
+# Upgrade pip inside venv
+python -m pip install --upgrade pip
+
+# Install with specific version constraints (NO --user flag in venv!)
 pip install Flask==3.1.2 requests==2.32.5
 
 # Check installation
 pip list | grep -i flask
+```
+
+### Issue: "Permission Denied" or "cannot perform a --user install"
+
+**Solution:**
+```bash
+# 1. Deactivate and exit virtual environment
+deactivate
+
+# 2. Remove old venv
+rm -rf venv
+
+# 3. Create fresh virtual environment
+python3 -m venv venv
+
+# 4. Activate it
+source venv/bin/activate
+
+# 5. Verify activation (should see (venv) prefix)
+echo $VIRTUAL_ENV
+
+# 6. Upgrade pip
+python -m pip install --upgrade pip
+
+# 7. Install packages (WITHOUT --user flag)
+pip install Flask==3.1.2 requests==2.32.5
+```
+
+### Issue: Netplan Configuration File Not Found
+
+**Solution:**
+```bash
+# 1. List all netplan files in the directory
+ls -la /etc/netplan/
+
+# 2. Common filenames:
+#    - 50-cloud-init.yaml (most common on cloud images)
+#    - 01-netcfg.yaml (older installations)
+#    - 00-installer-config.yaml (new installations)
+
+# 3. Use whichever file exists. For 50-cloud-init.yaml:
+sudo bash -c 'cat > /etc/netplan/50-cloud-init.yaml << EOF
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp0s8:
+      dhcp4: no
+      addresses:
+        - 10.109.0.150/23
+      routes:
+        - to: default
+          via: 10.109.0.1
+      nameservers:
+        addresses: [8.8.8.8, 8.8.4.4]
+EOF'
+
+# 4. Apply configuration
+sudo netplan apply
 ```
 
 ---
