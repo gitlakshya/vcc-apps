@@ -1,9 +1,3 @@
-"""
-Service B - VCC-2 Microservice
-Educational Purpose: Demonstrates inter-service communication in microservices architecture
-Responds to requests from Service A with hardcoded response strings
-"""
-
 from flask import Flask, jsonify
 import requests
 import socket
